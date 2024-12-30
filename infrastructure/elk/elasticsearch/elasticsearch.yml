@@ -1,0 +1,185 @@
+# Elasticsearch 7.17.0 Configuration
+# Purpose: Core configuration for task management system's log storage and search engine
+
+#----------------------
+# Cluster Configuration
+#----------------------
+cluster:
+  name: task-manager-logs
+  initial_master_nodes:
+    - es01
+    - es02
+    - es03
+  routing:
+    allocation:
+      awareness:
+        attributes: ["zone", "rack"]
+        force:
+          zone:
+            values: ["zone1", "zone2", "zone3"]
+      disk:
+        threshold_enabled: true
+        watermark:
+          low: "85%"
+          high: "90%"
+          flood_stage: "95%"
+  health:
+    update_interval: 10s
+    persistence:
+      enabled: true
+      path: /var/lib/elasticsearch/health
+
+#----------------------
+# Node Configuration
+#----------------------
+node:
+  name: ${HOSTNAME}
+  master: true
+  data: true
+  ingest: true
+  max_local_storage_nodes: 1
+  attr:
+    zone: ${NODE_ZONE}
+    rack: ${NODE_RACK}
+
+#----------------------
+# Paths Configuration
+#----------------------
+path:
+  data: /var/lib/elasticsearch
+  logs: /var/log/elasticsearch
+  repo: /var/lib/elasticsearch/snapshots
+
+#----------------------
+# Network Configuration
+#----------------------
+network:
+  host: 0.0.0.0
+  port: 9200
+  publish_host: ${PUBLISH_HOST}
+  tcp:
+    keep_alive: true
+    keep_idle: 300
+    reuse_address: true
+
+#----------------------
+# Security Configuration
+#----------------------
+security:
+  enabled: true
+  ssl:
+    keystore:
+      path: /etc/elasticsearch/certs/elastic-certificates.p12
+      password: ${KEYSTORE_PASSWORD}
+    truststore:
+      path: /etc/elasticsearch/certs/elastic-certificates.p12
+      password: ${TRUSTSTORE_PASSWORD}
+    cipher_suites:
+      - TLS_AES_256_GCM_SHA384
+      - TLS_CHACHA20_POLY1305_SHA256
+  authc:
+    realms:
+      native:
+        type: native
+        order: 0
+      ldap:
+        type: ldap
+        order: 1
+  ip_filter:
+    enabled: true
+    allow:
+      - "10.0.0.0/8"
+      - "172.16.0.0/12"
+      - "192.168.0.0/16"
+
+#----------------------
+# X-Pack Configuration
+#----------------------
+xpack:
+  security:
+    enabled: true
+    audit:
+      enabled: true
+      outputs: ["logfile", "index"]
+      logfile:
+        path: /var/log/elasticsearch/audit.json
+        events:
+          - authentication_success
+          - authentication_failure
+          - access_denied
+          - connection_denied
+    transport:
+      ssl:
+        enabled: true
+        verification_mode: certificate
+        client_authentication: required
+    http:
+      ssl:
+        enabled: true
+  monitoring:
+    enabled: true
+    collection:
+      enabled: true
+      interval: 30s
+      cluster_alerts:
+        enabled: true
+
+#----------------------
+# Memory Configuration
+#----------------------
+bootstrap:
+  memory_lock: true
+  system_call_filter: true
+
+#----------------------
+# Performance Settings
+#----------------------
+indices:
+  memory:
+    index_buffer_size: "10%"
+  recovery:
+    max_bytes_per_sec: "50mb"
+  fielddata:
+    cache:
+      size: "20%"
+  query:
+    bool:
+      max_clause_count: 2048
+
+#----------------------
+# Monitoring Settings
+#----------------------
+monitoring:
+  collection:
+    enabled: true
+    interval: 30s
+  history:
+    duration: "7d"
+  metrics:
+    system: ["cpu", "memory", "disk", "network", "process"]
+    indices: ["docs", "store", "indexing", "search", "merge", "refresh"]
+  alerts:
+    cluster_health:
+      yellow: warning
+      red: critical
+    disk_usage:
+      warning: 85
+      critical: 90
+
+#----------------------
+# Discovery Settings
+#----------------------
+discovery:
+  seed_hosts: ["es01", "es02", "es03"]
+  zen:
+    minimum_master_nodes: 2
+    commit_timeout: 30s
+    join_timeout: 30s
+
+#----------------------
+# Gateway Settings
+#----------------------
+gateway:
+  recover_after_nodes: 2
+  recover_after_time: "5m"
+  expected_nodes: 3
