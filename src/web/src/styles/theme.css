@@ -1,0 +1,176 @@
+/**
+ * Theme-specific CSS stylesheet
+ * Version: 1.0.0
+ * 
+ * Implements light and dark theme styles with system preference detection
+ * and manual theme toggle support. Ensures WCAG 2.1 Level AA compliance
+ * with minimum contrast ratio of 4.5:1 for all text elements.
+ */
+
+@import './variables.css';
+
+/* Default theme variables with fallback values */
+:root {
+  /* Base theme colors with fallbacks to light theme */
+  --theme-background: var(--color-background-light);
+  --theme-text: var(--color-text-light);
+  --theme-primary: var(--color-primary-light);
+  --theme-secondary: var(--color-secondary-light);
+  --theme-accent: var(--color-accent-light);
+  --theme-error: var(--color-error-light);
+  --theme-success: var(--color-success-light);
+  --theme-warning: var(--color-warning-light);
+  --theme-info: var(--color-info-light);
+  --theme-border: var(--color-border-light);
+  --theme-divider: var(--color-divider-light);
+  --theme-overlay: var(--color-overlay-light);
+
+  /* Transition for theme switching - disabled if reduced motion is preferred */
+  --theme-transition: background-color var(--transition-base),
+                     color var(--transition-base),
+                     border-color var(--transition-base),
+                     box-shadow var(--transition-base);
+}
+
+/* Light theme - explicit theme selection */
+[data-theme='light'] {
+  --theme-background: var(--color-background-light);
+  --theme-text: var(--color-text-light);          /* Contrast ratio: 12.63:1 */
+  --theme-primary: var(--color-primary-light);    /* Contrast ratio: 4.5:1 */
+  --theme-secondary: var(--color-secondary-light); /* Contrast ratio: 4.6:1 */
+  --theme-accent: var(--color-accent-light);      /* Used sparingly */
+  --theme-error: var(--color-error-light);        /* Contrast ratio: 4.5:1 */
+  --theme-success: var(--color-success-light);    /* Contrast ratio: 4.6:1 */
+  --theme-warning: var(--color-warning-light);    /* Contrast ratio: 4.5:1 */
+  --theme-info: var(--color-info-light);          /* Contrast ratio: 4.5:1 */
+  --theme-border: var(--color-border-light);
+  --theme-divider: var(--color-divider-light);
+  --theme-overlay: var(--color-overlay-light);
+}
+
+/* Dark theme - explicit theme selection */
+[data-theme='dark'] {
+  --theme-background: var(--color-background-dark);
+  --theme-text: var(--color-text-dark);           /* Contrast ratio: 21:1 */
+  --theme-primary: var(--color-primary-dark);     /* Contrast ratio: 4.5:1 */
+  --theme-secondary: var(--color-secondary-dark);  /* Contrast ratio: 5.5:1 */
+  --theme-accent: var(--color-accent-dark);       /* Used sparingly */
+  --theme-error: var(--color-error-dark);         /* Contrast ratio: 4.5:1 */
+  --theme-success: var(--color-success-dark);     /* Contrast ratio: 4.6:1 */
+  --theme-warning: var(--color-warning-dark);     /* Contrast ratio: 4.5:1 */
+  --theme-info: var(--color-info-dark);           /* Contrast ratio: 4.5:1 */
+  --theme-border: var(--color-border-dark);
+  --theme-divider: var(--color-divider-dark);
+  --theme-overlay: var(--color-overlay-dark);
+}
+
+/* System dark theme preference - automatic theme switching */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --theme-background: var(--color-background-dark);
+    --theme-text: var(--color-text-dark);
+    --theme-primary: var(--color-primary-dark);
+    --theme-secondary: var(--color-secondary-dark);
+    --theme-accent: var(--color-accent-dark);
+    --theme-error: var(--color-error-dark);
+    --theme-success: var(--color-success-dark);
+    --theme-warning: var(--color-warning-dark);
+    --theme-info: var(--color-info-dark);
+    --theme-border: var(--color-border-dark);
+    --theme-divider: var(--color-divider-dark);
+    --theme-overlay: var(--color-overlay-dark);
+  }
+}
+
+/* Apply theme transitions to themed elements */
+.theme-transition {
+  transition: var(--theme-transition);
+}
+
+/* Reduced motion preferences */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+  }
+
+  .theme-transition {
+    transition: none !important;
+  }
+}
+
+/* Common themed elements */
+body {
+  background-color: var(--theme-background);
+  color: var(--theme-text);
+}
+
+/* Themed text elements for consistent contrast ratios */
+.text-primary {
+  color: var(--theme-primary);
+}
+
+.text-secondary {
+  color: var(--theme-secondary);
+}
+
+.text-accent {
+  color: var(--theme-accent);
+}
+
+.text-error {
+  color: var(--theme-error);
+}
+
+.text-success {
+  color: var(--theme-success);
+}
+
+.text-warning {
+  color: var(--theme-warning);
+}
+
+.text-info {
+  color: var(--theme-info);
+}
+
+/* Themed borders and dividers */
+.border {
+  border-color: var(--theme-border);
+}
+
+.divider {
+  background-color: var(--theme-divider);
+}
+
+/* Themed overlays and backgrounds */
+.overlay {
+  background-color: var(--theme-overlay);
+}
+
+.bg-primary {
+  background-color: var(--theme-primary);
+  color: var(--theme-background);
+}
+
+.bg-secondary {
+  background-color: var(--theme-secondary);
+  color: var(--theme-background);
+}
+
+/* Focus outline for accessibility */
+:focus-visible {
+  outline: 2px solid var(--theme-primary);
+  outline-offset: 2px;
+}
+
+/* High contrast focus outline for Windows High Contrast Mode */
+@media screen and (-ms-high-contrast: active) {
+  :focus-visible {
+    outline: 2px solid currentColor;
+  }
+}
