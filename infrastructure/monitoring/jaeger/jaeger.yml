@@ -1,0 +1,173 @@
+# Jaeger Configuration v1.41.0
+# Purpose: Distributed tracing configuration for Task Management System microservices
+
+version: 1
+
+# Collector configuration - handles trace data ingestion and processing
+collector:
+  service_name: jaeger-collector
+  ports:
+    collector_port: 14250  # gRPC collector port
+    http_port: 14268      # HTTP collector port
+    grpc_port: 14267      # gRPC for agent communication
+  sampling_strategies_file: /etc/jaeger/sampling_strategies.json
+  zipkin:
+    host_port: :9411      # Zipkin compatibility port
+  workers:
+    num_workers: 50       # Number of collector workers
+    queue_size: 2000      # Queue size per worker
+  tags:
+    - env=production
+    - region=${REGION}
+
+# Query service configuration - handles trace querying and visualization
+query:
+  service_name: jaeger-query
+  port: 16686
+  base_path: /jaeger
+  cors:
+    allowed_origins:
+      - https://*.taskmaster.com
+    allowed_headers:
+      - Content-Type
+      - Authorization
+  cache:
+    type: memory
+    max_traces: 100000
+
+# Agent configuration - handles trace collection from services
+agent:
+  service_name: jaeger-agent
+  reporter:
+    grpc:
+      host_port: jaeger-collector:14250
+  processors:
+    jaeger-binary:
+      server-host-port: :6832
+      max_packet_size: 65000
+    jaeger-compact:
+      server-host-port: :6831
+      max_packet_size: 65000
+  tags:
+    - env=production
+    - region=${REGION}
+
+# Storage configuration - defines trace data persistence
+storage:
+  type: elasticsearch
+  options:
+    es:
+      server-urls: http://elasticsearch:9200
+      index-prefix: jaeger
+      username: ${ELASTIC_USERNAME}
+      password: ${ELASTIC_PASSWORD}
+      tls:
+        enabled: true
+        skip_host_verify: false
+        ca: /etc/jaeger/es-ca.crt
+      num_shards: 5
+      num_replicas: 1
+      max_doc_count: 10000000
+      retention: 7d
+
+# Sampling configuration - defines trace sampling strategies
+sampling:
+  type: probabilistic
+  param: 1.0  # 100% sampling for all services by default
+  service_strategies:
+    # API Gateway sampling strategy
+    - service: api-gateway
+      type: probabilistic
+      param: 1.0
+      operation_strategies:
+        - operation: http.request
+          type: probabilistic
+          param: 1.0
+        - operation: grpc.request
+          type: probabilistic
+          param: 1.0
+        - operation: database.query
+          type: probabilistic
+          param: 1.0
+        - operation: cache.operation
+          type: probabilistic
+          param: 1.0
+        - operation: auth.verify
+          type: probabilistic
+          param: 1.0
+
+    # Auth Service sampling strategy
+    - service: auth-service
+      type: probabilistic
+      param: 1.0
+      operation_strategies:
+        - operation: auth.login
+          type: probabilistic
+          param: 1.0
+        - operation: auth.validate
+          type: probabilistic
+          param: 1.0
+        - operation: auth.refresh
+          type: probabilistic
+          param: 1.0
+        - operation: database.query
+          type: probabilistic
+          param: 1.0
+        - operation: cache.operation
+          type: probabilistic
+          param: 1.0
+
+    # Task Service sampling strategy
+    - service: task-service
+      type: probabilistic
+      param: 1.0
+      operation_strategies:
+        - operation: task.create
+          type: probabilistic
+          param: 1.0
+        - operation: task.update
+          type: probabilistic
+          param: 1.0
+        - operation: task.delete
+          type: probabilistic
+          param: 1.0
+        - operation: database.query
+          type: probabilistic
+          param: 1.0
+        - operation: cache.operation
+          type: probabilistic
+          param: 1.0
+        - operation: notification.send
+          type: probabilistic
+          param: 1.0
+
+# Health check configuration
+health_check:
+  http:
+    port: 14269
+
+# Admin configuration
+admin:
+  http:
+    port: 14270
+
+# Metrics configuration for Prometheus integration
+metrics:
+  backend: prometheus
+  prometheus:
+    server_address: ":14271"
+
+# Resource limits
+resources:
+  max_memory: 4Gi
+  max_cpu: 2
+
+# Security configuration
+security:
+  tls:
+    enabled: true
+    cert: /etc/jaeger/cert.pem
+    key: /etc/jaeger/key.pem
+  authentication:
+    enabled: true
+    type: oauth2
