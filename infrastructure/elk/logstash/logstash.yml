@@ -1,0 +1,129 @@
+# Logstash Core Configuration
+# Version: 7.17.0
+# Purpose: Core settings for Logstash log processing component
+
+#------------------------------------------------------------------------------
+# Node Settings
+#------------------------------------------------------------------------------
+node.name: ${HOSTNAME}
+node.id: ${LOGSTASH_NODE_ID:unique_node_id}
+node.roles: ["collector", "processor"]
+
+#------------------------------------------------------------------------------
+# Path Settings
+#------------------------------------------------------------------------------
+path:
+  data: /var/lib/logstash
+  logs: /var/log/logstash
+  config: /etc/logstash/conf.d
+  plugins: /usr/share/logstash/plugins
+  queue: /var/lib/logstash/queue
+
+#------------------------------------------------------------------------------
+# Pipeline Settings
+#------------------------------------------------------------------------------
+pipeline:
+  ordered: true
+  workers: 2
+  batch:
+    size: 125
+    delay: 50
+  unsafe_shutdown: false
+  ecs_compatibility: "v1"
+
+#------------------------------------------------------------------------------
+# Queue Settings
+#------------------------------------------------------------------------------
+queue:
+  type: persisted
+  max_bytes: "1gb"
+  checkpoint:
+    writes: 1000
+  drain: false
+  page_capacity: "64mb"
+  max_events: 0
+
+#------------------------------------------------------------------------------
+# Monitoring Settings
+#------------------------------------------------------------------------------
+monitoring:
+  enabled: true
+  collection:
+    interval: "10s"
+  elasticsearch:
+    hosts: ["http://elasticsearch:9200"]
+    username: ${ELASTIC_USERNAME}
+    password: ${ELASTIC_PASSWORD}
+    ssl:
+      enabled: true
+      verification_mode: certificate
+      certificate_authority: /etc/logstash/certs/ca.crt
+  metrics:
+    collection:
+      interval: "10s"
+      timeout: "10s"
+
+#------------------------------------------------------------------------------
+# X-Pack Settings
+#------------------------------------------------------------------------------
+xpack:
+  monitoring:
+    enabled: true
+    elasticsearch:
+      hosts: ["http://elasticsearch:9200"]
+      username: ${ELASTIC_USERNAME}
+      password: ${ELASTIC_PASSWORD}
+      ssl:
+        enabled: true
+        verification_mode: certificate
+        certificate_authority: /etc/logstash/certs/ca.crt
+  management:
+    enabled: true
+    pipeline.id: ["main", "system"]
+
+#------------------------------------------------------------------------------
+# HTTP API Settings
+#------------------------------------------------------------------------------
+api:
+  enabled: true
+  host: "0.0.0.0"
+  port: 9600
+  ssl:
+    enabled: true
+    keystore: /etc/logstash/certs/logstash.keystore
+    keystore_password: ${KEYSTORE_PASSWORD}
+
+#------------------------------------------------------------------------------
+# Dead Letter Queue Settings
+#------------------------------------------------------------------------------
+dead_letter_queue:
+  enable: true
+  max_bytes: "1gb"
+  flush_interval: "5m"
+  storage_policy:
+    max_age: "7d"
+    max_size: "10gb"
+
+#------------------------------------------------------------------------------
+# Config Reload Settings
+#------------------------------------------------------------------------------
+config:
+  reload:
+    automatic: true
+    interval: "3s"
+
+#------------------------------------------------------------------------------
+# Log Settings
+#------------------------------------------------------------------------------
+log:
+  level: info
+  format: json
+
+#------------------------------------------------------------------------------
+# Performance Settings
+#------------------------------------------------------------------------------
+pipeline.workers: 2
+pipeline.batch.size: 125
+pipeline.batch.delay: 50
+queue.checkpoint.writes: 1000
+queue.page_capacity: "64mb"
