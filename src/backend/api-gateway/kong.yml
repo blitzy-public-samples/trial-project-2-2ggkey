@@ -1,0 +1,190 @@
+# Kong API Gateway Configuration v3.4+
+# Purpose: Declarative configuration for Task Management System API Gateway
+# Manages routing, security, and plugins for microservices architecture
+
+_format_version: "3.0"
+_transform: true
+
+# Services Configuration
+services:
+  - name: task-service
+    host: task-service
+    port: 8080
+    protocol: http
+    connect_timeout: 60000
+    write_timeout: 60000
+    read_timeout: 60000
+    retries: 5
+    routes:
+      - name: task-routes
+        paths:
+          - /api/v1/tasks
+          - /api/v1/projects
+        strip_path: false
+        preserve_host: true
+        protocols: 
+          - http
+          - https
+    plugins:
+      - name: jwt
+      - name: rate-limiting
+      - name: circuit-breaker
+
+  - name: auth-service
+    host: auth-service
+    port: 3000
+    protocol: http
+    routes:
+      - name: auth-routes
+        paths:
+          - /api/v1/auth
+          - /api/v1/users
+        strip_path: false
+        preserve_host: true
+        protocols:
+          - http
+          - https
+    plugins:
+      - name: cors
+      - name: ip-restriction
+      - name: bot-detection
+
+  - name: notification-service
+    host: notification-service
+    port: 5000
+    protocol: http
+    routes:
+      - name: notification-routes
+        paths:
+          - /api/v1/notifications
+        strip_path: false
+        preserve_host: true
+        protocols:
+          - http
+          - https
+      - name: websocket-routes
+        paths:
+          - /ws
+        protocols:
+          - ws
+          - wss
+    plugins:
+      - name: jwt
+      - name: rate-limiting
+
+  - name: file-service
+    host: file-service
+    port: 6000
+    protocol: http
+    routes:
+      - name: file-routes
+        paths:
+          - /api/v1/files
+        strip_path: false
+        preserve_host: true
+        protocols:
+          - http
+          - https
+    plugins:
+      - name: jwt
+      - name: request-validator
+
+# Global Plugins Configuration
+plugins:
+  - name: rate-limiting
+    config:
+      second: 50
+      minute: 1000
+      hour: 10000
+      policy: local
+      fault_tolerant: true
+      hide_client_headers: false
+      redis_timeout: 2000
+
+  - name: cors
+    config:
+      origins:
+        - https://*.taskmaster.com
+      methods:
+        - GET
+        - POST
+        - PUT
+        - DELETE
+        - OPTIONS
+        - PATCH
+      headers:
+        - Authorization
+        - Content-Type
+        - X-Request-ID
+      exposed_headers:
+        - X-Auth-Token
+        - X-Request-ID
+      credentials: true
+      max_age: 3600
+      preflight_continue: false
+
+  - name: jwt
+    config:
+      header_names:
+        - Authorization
+      claims_to_verify:
+        - exp
+        - nbf
+        - iss
+        - sub
+      key_claim_name: kid
+      secret_is_base64: false
+      run_on_preflight: true
+      maximum_expiration: 86400
+
+  - name: request-validator
+    config:
+      parameter_validation: true
+      body_validation: true
+      strict_validation: true
+      version: draft4
+      verbose_response: false
+
+  - name: ip-restriction
+    config:
+      allow:
+        - 10.0.0.0/8
+        - 172.16.0.0/12
+        - 192.168.0.0/16
+      deny:
+        - 0.0.0.0/0
+      status: 403
+
+  - name: bot-detection
+    config:
+      allow:
+        - "curl/7.*"
+      deny:
+        - "*"
+      status: 403
+
+  - name: circuit-breaker
+    config:
+      timeout: 60000
+      threshold: 0.5
+      window_size: 60
+      volume_threshold: 20
+
+# Consumer Configuration
+consumers:
+  - username: internal-services
+    jwt_secrets:
+      - key: internal-key
+        algorithm: HS256
+        secret: ${INTERNAL_JWT_SECRET}
+
+# Additional Security Headers
+headers:
+  - name: X-Frame-Options
+    value: DENY
+  - name: X-Content-Type-Options
+    value: nosniff
+  - name: Strict-Transport-Security
+    value: max-age=31536000; includeSubDomains
+  - name: Content-Security-Policy
+    value: default-src 'self'; frame-ancestors 'none'
