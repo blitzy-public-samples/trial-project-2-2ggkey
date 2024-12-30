@@ -1,0 +1,93 @@
+# Kubernetes Ingress Manifest for Task Management System
+# Version: networking.k8s.io/v1
+# Dependencies:
+# - kubernetes-ingress v1.27+
+# - cert-manager v1.12+
+# - kong-ingress-controller v2.10+
+
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: task-management-ingress
+  namespace: task-management
+  labels:
+    app: task-management
+    environment: production
+    managed-by: kong
+  annotations:
+    # Kong Ingress Controller Configuration
+    kubernetes.io/ingress.class: "kong"
+    konghq.com/strip-path: "true"
+    konghq.com/protocols: "https"
+    konghq.com/https-redirect-status-code: "301"
+    konghq.com/preserve-host: "true"
+    konghq.com/rewrite-target: "/$2"
+    
+    # Timeouts and Connection Settings
+    konghq.com/proxy-connect-timeout: "60"
+    konghq.com/proxy-read-timeout: "60"
+    konghq.com/proxy-send-timeout: "60"
+    
+    # Rate Limiting Configuration
+    konghq.com/rate-limiting.enabled: "true"
+    konghq.com/rate-limiting.config.minute: "1000"
+    konghq.com/rate-limiting.config.hour: "10000"
+    
+    # SSL/TLS Configuration
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    
+    # Monitoring and Metrics
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    
+    # Backup Configuration
+    backup.velero.io/backup-volumes: "tls-certs"
+
+spec:
+  # TLS Configuration
+  tls:
+    - hosts:
+        - api.taskmanager.com
+      secretName: tls-secret
+  
+  # Routing Rules
+  rules:
+    - host: api.taskmanager.com
+      http:
+        paths:
+          # Task Service Routes
+          - path: /api/v1/tasks(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: task-service
+                port:
+                  number: 8080
+          
+          # Authentication Service Routes
+          - path: /api/v1/auth(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: auth-service
+                port:
+                  number: 8080
+          
+          # File Service Routes
+          - path: /api/v1/files(/|$)(.*)
+            pathType: Prefix
+            backend:
+              service:
+                name: file-service
+                port:
+                  number: 8080
+          
+          # Health Check Endpoint
+          - path: /health
+            pathType: Exact
+            backend:
+              service:
+                name: health-check
+                port:
+                  number: 8080
