@@ -1,0 +1,184 @@
+# File Service Kubernetes Deployment Configuration v1.0.0
+# Kubernetes Version: v1.27+
+# Purpose: Production deployment manifest for Go-based file service microservice
+# Security: Enhanced with PCI-DSS compliance and security best practices
+# Last Updated: 2024
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: file-service
+  namespace: taskmanager
+  labels:
+    app: file-service
+    tier: backend
+    environment: production
+    cost-center: operations
+    security-compliance: pci-dss
+  annotations:
+    kubernetes.io/description: "File service microservice for task management system"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8080"
+    prometheus.io/path: "/metrics"
+    security.kubernetes.io/seccomp-profile: "runtime/default"
+
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: file-service
+      tier: backend
+      environment: production
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+
+  template:
+    metadata:
+      labels:
+        app: file-service
+        tier: backend
+        environment: production
+        security-compliance: pci-dss
+      annotations:
+        checksum/config: ${CONFIG_CHECKSUM}
+        checksum/secrets: ${SECRETS_CHECKSUM}
+        
+    spec:
+      serviceAccountName: file-service-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+        seccompProfile:
+          type: RuntimeDefault
+      
+      containers:
+      - name: file-service
+        image: file-service:latest
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop: ["ALL"]
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 30
+        
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 30
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 15
+          periodSeconds: 10
+
+        envFrom:
+        - configMapRef:
+            name: file-service-config
+        - secretRef:
+            name: aws-secrets
+
+        volumeMounts:
+        - name: tmp-volume
+          mountPath: /tmp
+        - name: secrets-store
+          mountPath: /mnt/secrets-store
+          readOnly: true
+
+      volumes:
+      - name: tmp-volume
+        emptyDir:
+          medium: Memory
+          sizeLimit: 256Mi
+      - name: secrets-store
+        csi:
+          driver: secrets-store.csi.k8s.io
+          readOnly: true
+          volumeAttributes:
+            secretProviderClass: aws-secrets
+
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - file-service
+              topologyKey: kubernetes.io/hostname
+
+      tolerations:
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 300
+
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: file-service-hpa
+  namespace: taskmanager
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: file-service
+  minReplicas: 2
+  maxReplicas: 8
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
