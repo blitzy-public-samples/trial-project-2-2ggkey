@@ -1,0 +1,108 @@
+{{ define "__subject" }}
+{{- if .CommonLabels.alertname }}
+[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} - {{ .CommonLabels.severity | toUpper }}
+{{- else }}
+[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - {{ .CommonLabels.severity | toUpper }}
+{{- end }}
+{{ end }}
+
+{{ define "__text_alert_list" }}
+{{- range .Alerts }}
+Severity: {{ .Labels.severity | toUpper }}
+Service: {{ .Labels.service }}
+Description: {{ .Annotations.description }}
+Value: {{ .Value }}
+Started: {{ .StartsAt }}
+Environment: {{ .Labels.environment }}
+{{- if .Annotations.runbook_url }}
+Runbook: {{ .Annotations.runbook_url }}
+{{- end }}
+-------------------
+{{- end }}
+{{ end }}
+
+{{/* Email Templates */}}
+{{ define "email.subject" }}{{ template "__subject" . }}{{ end }}
+
+{{ define "email.html" }}
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>{{ template "__subject" . }}</title>
+    <style>
+        body { font-family: Arial, sans-serif; }
+        .alert { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .firing { border-left: 5px solid #dc3545; }
+        .resolved { border-left: 5px solid #28a745; }
+        .severity-critical { background-color: #fff3f3; }
+        .severity-warning { background-color: #fff9e6; }
+        .severity-info { background-color: #f8f9fa; }
+    </style>
+</head>
+<body>
+    <h2>{{ template "__subject" . }}</h2>
+    {{- range .Alerts }}
+    <div class="alert {{ .Status }} severity-{{ .Labels.severity }}">
+        <h3>Alert: {{ .Labels.alertname }}</h3>
+        <p><strong>Severity:</strong> {{ .Labels.severity | toUpper }}</p>
+        <p><strong>Service:</strong> {{ .Labels.service }}</p>
+        <p><strong>Description:</strong> {{ .Annotations.description }}</p>
+        <p><strong>Value:</strong> {{ .Value }}</p>
+        <p><strong>Started:</strong> {{ .StartsAt }}</p>
+        <p><strong>Environment:</strong> {{ .Labels.environment }}</p>
+        {{- if .Annotations.runbook_url }}
+        <p><strong>Runbook:</strong> <a href="{{ .Annotations.runbook_url }}">View Runbook</a></p>
+        {{- end }}
+    </div>
+    {{- end }}
+</body>
+</html>
+{{ end }}
+
+{{/* Slack Templates */}}
+{{ define "slack.title" }}{{ template "__subject" . }}{{ end }}
+
+{{ define "slack.text" }}
+{{- range .Alerts }}
+*Alert:* {{ .Labels.alertname }}
+*Severity:* {{ .Labels.severity | toUpper }}
+*Service:* {{ .Labels.service }}
+*Description:* {{ .Annotations.description }}
+*Value:* {{ .Value }}
+*Started:* {{ .StartsAt }}
+*Environment:* {{ .Labels.environment }}
+{{- if .Annotations.runbook_url }}
+*Runbook:* {{ .Annotations.runbook_url }}
+{{- end }}
+-------------------
+{{- end }}
+{{ end }}
+
+{{/* PagerDuty Templates */}}
+{{ define "pagerduty.summary" }}
+{{- if .CommonLabels.alertname }}
+[{{ .Status | toUpper }}] {{ .CommonLabels.alertname }} - {{ .CommonLabels.severity | toUpper }} - {{ .CommonLabels.service }} - {{ .CommonLabels.environment }}
+{{- else }}
+[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }} - {{ .CommonLabels.severity | toUpper }} - {{ .CommonLabels.service }} - {{ .CommonLabels.environment }}
+{{- end }}
+{{ end }}
+
+{{ define "pagerduty.description" }}{{ template "__text_alert_list" . }}{{ end }}
+
+{{/* Common Alert Details */}}
+{{ define "__alert_details" }}
+{{- range .Alerts }}
+Alert: {{ .Labels.alertname }}
+Severity: {{ .Labels.severity | toUpper }}
+Service: {{ .Labels.service }}
+Description: {{ .Annotations.description }}
+Value: {{ .Value }}
+Started: {{ .StartsAt }}
+Environment: {{ .Labels.environment }}
+{{- if .Annotations.runbook_url }}
+Runbook: {{ .Annotations.runbook_url }}
+{{- end }}
+-------------------
+{{- end }}
+{{ end }}
