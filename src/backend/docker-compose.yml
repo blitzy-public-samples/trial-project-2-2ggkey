@@ -1,0 +1,244 @@
+version: '3.8'
+
+# Service definitions
+services:
+  # API Gateway Service
+  api-gateway:
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    image: task-management/api-gateway:3.4
+    ports:
+      - "8000:8000"  # HTTP
+      - "8001:8001"  # Admin API
+      - "8443:8443"  # HTTPS
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: postgres
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD_FILE: /run/secrets/postgres_password
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: "0.0.0.0:8000, 0.0.0.0:8443 ssl"
+    volumes:
+      - ./api-gateway/ssl:/etc/kong/ssl:ro
+      - kong_logs:/var/log/kong
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      replicas: 2
+      resources:
+        limits:
+          cpus: '1'
+          memory: 1G
+        reservations:
+          cpus: '0.5'
+          memory: 512M
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    secrets:
+      - postgres_password
+      - ssl_cert
+      - ssl_key
+
+  # Task Service
+  task-service:
+    image: task-management/task-service:latest
+    environment:
+      SPRING_PROFILES_ACTIVE: production
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/taskdb
+      SPRING_DATASOURCE_USERNAME: task_user
+      SPRING_DATASOURCE_PASSWORD_FILE: /run/secrets/postgres_password
+      SPRING_REDIS_HOST: redis
+      SPRING_RABBITMQ_HOST: rabbitmq
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    secrets:
+      - postgres_password
+      - redis_password
+      - rabbitmq_password
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      POSTGRES_DB: kong
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    secrets:
+      - postgres_password
+
+  # Redis Cache
+  redis:
+    image: redis:7.0-alpine
+    command: redis-server --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redis_data:/data
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    secrets:
+      - redis_password
+
+  # RabbitMQ Message Broker
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: rabbitmq
+      RABBITMQ_DEFAULT_PASS_FILE: /run/secrets/rabbitmq_password
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+        reservations:
+          cpus: '0.5'
+          memory: 1G
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    secrets:
+      - rabbitmq_password
+
+  # Prometheus Monitoring
+  prometheus:
+    image: prom/prometheus:latest
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    configs:
+      - prometheus_config
+
+  # Grafana Dashboard
+  grafana:
+    image: grafana/grafana:latest
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./grafana/grafana.ini:/etc/grafana/grafana.ini:ro
+    networks:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+    configs:
+      - grafana_config
+
+# Volumes
+volumes:
+  postgres_data:
+    driver: local
+    driver_opts:
+      type: none
+      device: /data/postgres
+      o: bind
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  kong_logs:
+    driver: local
+
+# Networks
+networks:
+  backend:
+    driver: overlay
+    attachable: true
+    internal: true
+    driver_opts:
+      encrypted: "true"
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.16.0.0/24
+
+# Configs
+configs:
+  prometheus_config:
+    file: ./prometheus/prometheus.yml
+  grafana_config:
+    file: ./grafana/grafana.ini
+
+# Secrets
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  redis_password:
+    file: ./secrets/redis_password.txt
+  rabbitmq_password:
+    file: ./secrets/rabbitmq_password.txt
+  ssl_cert:
+    file: ./api-gateway/ssl/kong.crt
+  ssl_key:
+    file: ./api-gateway/ssl/kong.key
