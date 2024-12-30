@@ -1,0 +1,156 @@
+# Prometheus Configuration v2.45.0
+# This configuration file defines the monitoring setup for the Task Management System
+# including service discovery, alerting rules, and metric collection configurations.
+
+global:
+  # Global settings affecting all scrape configurations
+  scrape_interval: 15s     # How frequently to scrape targets
+  evaluation_interval: 15s # How frequently to evaluate rules
+  scrape_timeout: 10s     # How long until a scrape request times out
+  
+  # External labels to identify this Prometheus instance
+  external_labels:
+    environment: production
+    region: us-east-1
+    system: task-management
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+          labels:
+            environment: production
+
+# Rule files containing recording and alerting rules
+rule_files:
+  - /etc/prometheus/rules/node_rules.yml     # Infrastructure-level rules
+  - /etc/prometheus/rules/service_rules.yml   # Service-level rules
+  - /etc/prometheus/rules/business_rules.yml  # Business metrics rules
+  - /etc/prometheus/rules/slo_rules.yml       # SLO/SLA compliance rules
+
+# Scrape configurations containing endpoints to monitor
+scrape_configs:
+  # Self-monitoring
+  - job_name: prometheus
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # API Gateway monitoring
+  - job_name: api-gateway
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['default']
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: api-gateway
+        action: keep
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'http_(request_duration_seconds|requests_total|response_size_bytes).*'
+        action: keep
+    scheme: https
+    tls_config:
+      insecure_skip_verify: false
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Task Service monitoring
+  - job_name: task-service
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['default']
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: task-service
+        action: keep
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'task_(creation|completion)_.*|active_users_.*|project_.*'
+        action: keep
+    scrape_interval: 15s
+
+  # Node Exporter for hardware and OS metrics
+  - job_name: node-exporter
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_node_label_node_role_kubernetes_io_node]
+        regex: 'true'
+        action: keep
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'node_(cpu|memory|disk|filesystem|network)_.*'
+        action: keep
+    scrape_interval: 30s
+
+  # Redis monitoring for cache metrics
+  - job_name: redis-exporter
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['default']
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: redis-exporter
+        action: keep
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'redis_(connected_clients|memory_used_bytes|commands_total).*'
+        action: keep
+
+  # PostgreSQL monitoring
+  - job_name: postgres-exporter
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['default']
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: postgres-exporter
+        action: keep
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'pg_(database_size|stat_database_.*|stat_bgwriter_.*).*'
+        action: keep
+
+  # SLO monitoring for critical paths
+  - job_name: slo-monitor
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names: ['default']
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app]
+        regex: 'api-gateway|task-service'
+        action: keep
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'http_request_duration_seconds_bucket|error_rate_total|system_uptime_seconds_total'
+        action: keep
+    scrape_interval: 10s
+
+# Remote write configuration for long-term storage
+remote_write:
+  - url: "http://thanos-receive:19291/api/v1/receive"
+    queue_config:
+      capacity: 500
+      max_samples_per_send: 100
+      batch_send_deadline: 5s
+    write_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'task_.*|http_.*|node_.*'
+        action: keep
+
+# Remote read configuration for historical data
+remote_read:
+  - url: "http://thanos-query:19192/api/v1/read"
+    read_recent: true
