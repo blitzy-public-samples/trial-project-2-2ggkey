@@ -1,0 +1,185 @@
+name: Security Scan
+
+on:
+  schedule:
+    - cron: '0 0 * * 0'  # Run weekly on Sunday at midnight
+  pull_request:
+    branches: ['main', 'develop']
+  push:
+    branches: ['main', 'develop']
+
+env:
+  SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+  GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  SCAN_TIMEOUT: 360
+  MAX_CRITICAL_VULNERABILITIES: 0
+
+jobs:
+  sast:
+    name: Static Application Security Testing
+    runs-on: ubuntu-latest
+    needs: [ci]
+    timeout-minutes: ${{ env.SCAN_TIMEOUT }}
+
+    strategy:
+      matrix:
+        language: ['javascript', 'typescript', 'java']
+      fail-fast: false
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v2
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended,security-and-quality
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v2
+        with:
+          category: "/language:${{ matrix.language }}"
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: results/codeql-results.sarif
+
+  dependency_scanning:
+    name: Dependency Vulnerability Scanning
+    runs-on: ubuntu-latest
+    needs: [ci]
+    timeout-minutes: ${{ env.SCAN_TIMEOUT }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Snyk
+        uses: snyk/actions/setup@v1.2.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Setup Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Scan Frontend Dependencies
+        run: |
+          cd src/web
+          snyk test --all-projects --json > frontend-deps-report.json
+        continue-on-error: true
+
+      - name: Scan Backend Dependencies
+        run: |
+          cd src/backend/task-service
+          snyk test --all-projects --json > backend-deps-report.json
+        continue-on-error: true
+
+      - name: Upload Dependency Scan Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: dependency-scan-results
+          path: |
+            src/web/frontend-deps-report.json
+            src/backend/task-service/backend-deps-report.json
+
+  container_scanning:
+    name: Container and Filesystem Security Scan
+    runs-on: ubuntu-latest
+    needs: [ci]
+    timeout-minutes: ${{ env.SCAN_TIMEOUT }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Run Trivy filesystem scan
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'json'
+          output: 'trivy-fs-results.json'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Trivy container scan
+        uses: aquasecurity/trivy-action@0.11.2
+        with:
+          scan-type: 'image'
+          image-ref: 'task-management-system:latest'
+          format: 'json'
+          output: 'trivy-container-results.json'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Container Scan Results
+        uses: actions/upload-artifact@v3
+        with:
+          name: container-scan-results
+          path: |
+            trivy-fs-results.json
+            trivy-container-results.json
+
+  security_compliance:
+    name: Security Compliance Check
+    runs-on: ubuntu-latest
+    needs: [sast, dependency_scanning, container_scanning]
+    timeout-minutes: 30
+
+    steps:
+      - name: Download all scan results
+        uses: actions/download-artifact@v3
+        with:
+          path: scan-results
+
+      - name: Check for critical vulnerabilities
+        run: |
+          echo "Analyzing security scan results..."
+          
+          # Check SAST results
+          SAST_CRITICALS=$(jq '.runs[].results[] | select(.level=="error") | length' scan-results/sast-results/codeql-results.sarif)
+          
+          # Check dependency scan results
+          DEP_CRITICALS=$(jq '.vulnerabilities[] | select(.severity=="critical") | length' scan-results/dependency-scan-results/*.json)
+          
+          # Check container scan results
+          CONTAINER_CRITICALS=$(jq '.vulnerabilities[] | select(.severity=="CRITICAL") | length' scan-results/container-scan-results/*.json)
+          
+          TOTAL_CRITICALS=$((SAST_CRITICALS + DEP_CRITICALS + CONTAINER_CRITICALS))
+          
+          if [ "$TOTAL_CRITICALS" -gt "$MAX_CRITICAL_VULNERABILITIES" ]; then
+            echo "❌ Found ${TOTAL_CRITICALS} critical vulnerabilities. Maximum allowed: ${MAX_CRITICAL_VULNERABILITIES}"
+            exit 1
+          fi
+          
+          echo "✅ Security compliance check passed"
+
+      - name: Generate consolidated security report
+        run: |
+          {
+            echo "# Security Scan Report"
+            echo "## Summary"
+            echo "- SAST Scan: $(jq '.runs[].results | length' scan-results/sast-results/codeql-results.sarif) findings"
+            echo "- Dependency Scan: $(jq '.vulnerabilities | length' scan-results/dependency-scan-results/*.json) vulnerabilities"
+            echo "- Container Scan: $(jq '.vulnerabilities | length' scan-results/container-scan-results/*.json) vulnerabilities"
+            echo
+            echo "For detailed results, please check the uploaded artifacts."
+          } > security-report.md
+
+      - name: Upload consolidated report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-scan-results
+          path: |
+            security-report.md
+            scan-results/**
