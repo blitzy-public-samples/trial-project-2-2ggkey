@@ -1,0 +1,30 @@
+# At least one admin approval required for unmatched paths
+* @repo-admins
+
+# Frontend team owns all web application code
+# At least one frontend team member approval required
+src/web/* @frontend-team
+
+# Backend team owns all backend services code
+# At least one backend team member approval required 
+src/backend/* @backend-team
+
+# Security and backend teams jointly own authentication service
+# Requires approval from both teams for enhanced security oversight
+src/backend/auth-service/* @security-team @backend-team
+
+# DevOps team owns all infrastructure configuration
+# At least one DevOps team member approval required
+infrastructure/* @devops-team
+
+# DevOps team owns all CI/CD workflow configurations
+# At least one DevOps team member approval required
+.github/workflows/* @devops-team
+
+# Database and backend teams jointly own database migrations
+# Requires approval from both teams for data integrity
+src/backend/database/migrations/* @database-team @backend-team
+
+# DevOps and SRE teams jointly own monitoring configuration
+# Requires approval from both teams for observability standards
+infrastructure/monitoring/* @devops-team @sre-team
