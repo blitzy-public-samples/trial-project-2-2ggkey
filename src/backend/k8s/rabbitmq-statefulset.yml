@@ -1,0 +1,241 @@
+# RabbitMQ StatefulSet Configuration
+# Version: 3.12+
+# Purpose: Production-grade RabbitMQ deployment with HA, monitoring, and security
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbitmq
+  namespace: task-manager
+  labels:
+    app: rabbitmq
+    component: message-broker
+    part-of: task-management-system
+spec:
+  serviceName: rabbitmq
+  replicas: 3  # High availability cluster with 3 nodes
+  selector:
+    matchLabels:
+      app: rabbitmq
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      partition: 0
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: rabbitmq
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9419"
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - rabbitmq
+              topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 60
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+      containers:
+      - name: rabbitmq
+        image: rabbitmq:3.12-management
+        imagePullPolicy: IfNotPresent
+        resources:
+          requests:
+            memory: "1Gi"
+            cpu: "500m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        ports:
+        - name: amqp
+          containerPort: 5672
+        - name: amqps
+          containerPort: 5671
+        - name: management
+          containerPort: 15672
+        - name: management-tls
+          containerPort: 15671
+        - name: epmd
+          containerPort: 4369
+        - name: cluster
+          containerPort: 25672
+        - name: metrics
+          containerPort: 9419
+        env:
+        - name: RABBITMQ_ERLANG_COOKIE
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: ERLANG_COOKIE
+        - name: RABBITMQ_DEFAULT_USER
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_USER
+        - name: RABBITMQ_DEFAULT_PASS
+          valueFrom:
+            secretKeyRef:
+              name: rabbitmq-secret
+              key: RABBITMQ_PASSWORD
+        - name: RABBITMQ_USE_LONGNAME
+          value: "true"
+        - name: RABBITMQ_NODENAME
+          value: "rabbit@$(HOSTNAME).rabbitmq.$(NAMESPACE).svc.cluster.local"
+        - name: K8S_SERVICE_NAME
+          value: "rabbitmq"
+        - name: RABBITMQ_VHOST
+          value: "task-manager"
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/rabbitmq
+        - name: config
+          mountPath: /etc/rabbitmq/rabbitmq.conf
+          subPath: rabbitmq.conf
+        - name: tls
+          mountPath: /etc/rabbitmq/tls
+          readOnly: true
+        livenessProbe:
+          exec:
+            command: ["rabbitmq-diagnostics", "status"]
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+        readinessProbe:
+          exec:
+            command: ["rabbitmq-diagnostics", "check_port_connectivity"]
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+        startupProbe:
+          exec:
+            command: ["rabbitmq-diagnostics", "check_running"]
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 30
+      volumes:
+      - name: config
+        configMap:
+          name: notification-service-config
+          items:
+          - key: rabbitmq.conf
+            path: rabbitmq.conf
+      - name: tls
+        secret:
+          secretName: rabbitmq-secret
+          items:
+          - key: RABBITMQ_TLS_CERT
+            path: tls.crt
+          - key: RABBITMQ_TLS_KEY
+            path: tls.key
+  volumeClaimTemplates:
+  - metadata:
+      name: data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: standard
+      resources:
+        requests:
+          storage: 10Gi
+
+---
+# Headless Service for StatefulSet DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: rabbitmq
+  namespace: task-manager
+  labels:
+    app: rabbitmq
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: amqp
+    port: 5672
+    targetPort: 5672
+  - name: amqps
+    port: 5671
+    targetPort: 5671
+  - name: management
+    port: 15672
+    targetPort: 15672
+  - name: management-tls
+    port: 15671
+    targetPort: 15671
+  - name: metrics
+    port: 9419
+    targetPort: 9419
+  selector:
+    app: rabbitmq
+
+---
+# ServiceMonitor for Prometheus integration
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: rabbitmq
+  namespace: task-manager
+  labels:
+    app: rabbitmq
+    release: prometheus
+spec:
+  selector:
+    matchLabels:
+      app: rabbitmq
+  endpoints:
+  - port: metrics
+    interval: 15s
+    path: /metrics
+  namespaceSelector:
+    matchNames:
+    - task-manager
+
+---
+# PrometheusRule for RabbitMQ alerts
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: rabbitmq-alerts
+  namespace: task-manager
+  labels:
+    app: rabbitmq
+    prometheus: kube-prometheus
+spec:
+  groups:
+  - name: rabbitmq
+    rules:
+    - alert: RabbitmqQueueDepthHigh
+      expr: rabbitmq_queue_messages > 1000
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Queue depth exceeded threshold"
+        description: "Queue {{ $labels.queue }} has more than 1000 messages"
+    - alert: RabbitmqMemoryHigh
+      expr: rabbitmq_process_resident_memory_bytes / rabbitmq_resident_memory_limit_bytes * 100 > 85
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Memory usage high"
+        description: "RabbitMQ memory usage is above 85%"
+    - alert: RabbitmqDiskSpaceLow
+      expr: rabbitmq_disk_free_bytes / rabbitmq_disk_space_total_bytes * 100 < 20
+      for: 5m
+      labels:
+        severity: warning
+      annotations:
+        summary: "Disk space low"
+        description: "RabbitMQ disk space is below 20%"
