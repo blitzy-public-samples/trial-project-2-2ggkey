@@ -1,0 +1,159 @@
+# Kong API Gateway Deployment Manifest
+# Version: 3.4+
+# Purpose: Handles routing, rate limiting, and security for Task Management System microservices
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: task-management
+  labels:
+    app: api-gateway
+    component: gateway
+    part-of: task-management-system
+    managed-by: kubectl
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8100"
+    prometheus.io/path: "/metrics"
+
+spec:
+  # High availability with 3 replicas
+  replicas: 3
+  
+  # Zero-downtime updates with rolling deployment
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  # Pod selector for service matching
+  selector:
+    matchLabels:
+      app: api-gateway
+  
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+        component: gateway
+    
+    spec:
+      # Enhanced security context
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+        readOnlyRootFilesystem: true
+      
+      # Configuration and secrets volumes
+      volumes:
+        - name: kong-config
+          configMap:
+            name: kong-config
+        - name: ssl-certs
+          secret:
+            secretName: ssl-certs
+        - name: jwt-secrets
+          secret:
+            secretName: jwt-secrets
+        - name: tmp
+          emptyDir: {}
+      
+      containers:
+        - name: kong
+          image: kong:3.4
+          imagePullPolicy: IfNotPresent
+          
+          # Exposed ports
+          ports:
+            - containerPort: 8000
+              name: proxy
+              protocol: TCP
+            - containerPort: 8443
+              name: proxy-ssl
+              protocol: TCP
+            - containerPort: 8100
+              name: metrics
+              protocol: TCP
+          
+          # Resource limits and requests
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+          
+          # Environment configuration
+          env:
+            - name: KONG_DATABASE
+              value: "off"
+            - name: KONG_DECLARATIVE_CONFIG
+              value: "/etc/kong/kong.yml"
+            - name: KONG_PROXY_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_ADMIN_ACCESS_LOG
+              value: "/dev/stdout"
+            - name: KONG_PROXY_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_ADMIN_ERROR_LOG
+              value: "/dev/stderr"
+            - name: KONG_PLUGINS
+              value: "bundled,rate-limiting,cors,jwt,prometheus"
+          
+          # Volume mounts
+          volumeMounts:
+            - name: kong-config
+              mountPath: /etc/kong
+              readOnly: true
+            - name: ssl-certs
+              mountPath: /etc/kong/ssl
+              readOnly: true
+            - name: jwt-secrets
+              mountPath: /etc/kong/jwt
+              readOnly: true
+            - name: tmp
+              mountPath: /tmp
+          
+          # Liveness probe
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          # Readiness probe
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 2
+      
+      # Pod security policies
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      # Node affinity for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - api-gateway
+                topologyKey: kubernetes.io/hostname
