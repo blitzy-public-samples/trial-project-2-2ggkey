@@ -1,0 +1,129 @@
+# Kibana Configuration v7.17.0
+# Server Configuration
+server:
+  name: task-manager-kibana
+  host: "0.0.0.0"
+  port: 5601
+  
+  # SSL/TLS Configuration
+  ssl:
+    enabled: true
+    certificate: "/etc/kibana/certs/kibana-server.crt"
+    key: "/etc/kibana/certs/kibana-server.key"
+    verificationMode: "certificate"
+
+  # Session Management
+  sessionTimeout: 3600000  # 1-hour idle timeout
+  maxSessionAge: 86400000  # 24-hour maximum session lifespan
+
+# Elasticsearch Connection
+elasticsearch:
+  hosts: ["https://elasticsearch:9200"]
+  username: "${ELASTICSEARCH_USERNAME}"
+  password: "${ELASTICSEARCH_PASSWORD}"
+  
+  ssl:
+    certificateAuthorities: ["/etc/kibana/certs/ca.crt"]
+    verificationMode: "certificate"
+  
+  # Connection Timeouts
+  pingTimeout: 30000
+  requestTimeout: 60000
+
+# Monitoring Configuration
+monitoring:
+  ui:
+    container:
+      elasticsearch:
+        enabled: true
+  
+  kibana:
+    collection:
+      enabled: true
+      interval: 30000
+    metrics: [
+      "kibana.status",
+      "kibana.requests",
+      "kibana.response_times",
+      "kibana.memory_usage",
+      "kibana.concurrent_connections",
+      "kibana.heap_usage"
+    ]
+    retention_period: "7d"
+
+# Performance Settings
+ops:
+  interval: 5000
+  maxResponseSize: 1000000
+
+node:
+  options:
+    # Memory Settings
+    max_old_space_size: "1g"
+    heap_size_limit: "1.5g"
+
+# Reporting Configuration
+reporting:
+  capture:
+    timeout: "2m"
+    maxAttempts: 3
+    waitForElements: 30000
+  
+  encryptionKey: "${REPORTING_ENCRYPTION_KEY}"
+
+# Alerting Configuration
+xpack:
+  monitoring:
+    alerts:
+      cpu:
+        threshold: 80
+      memory:
+        threshold: 85
+      response_time:
+        threshold: 5000
+
+# Security Settings
+xpack.security:
+  enabled: true
+  encryptionKey: "${SECURITY_ENCRYPTION_KEY}"
+  session:
+    idleTimeout: "1h"
+    lifespan: "24h"
+
+# CORS and CSP Configuration
+server.cors:
+  enabled: true
+  origin: ["https://*.task-manager.com"]
+  credentials: true
+
+csp.rules: [
+  "default-src 'self'",
+  "img-src 'self' data: blob:",
+  "style-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-eval' 'unsafe-inline'"
+]
+
+# Logging Configuration
+logging:
+  appenders:
+    file:
+      type: file
+      fileName: "/var/log/kibana/kibana.log"
+      layout:
+        type: pattern
+        pattern: "[%d] [%p] [%c] %m"
+  root:
+    level: info
+
+# Path Configuration
+path:
+  data: "/var/lib/kibana"
+  logs: "/var/log/kibana"
+
+# Plugin Configuration
+plugins:
+  scanDirs: ["/usr/share/kibana/plugins"]
+  initialize: true
+
+# i18n Configuration
+i18n.locale: "en"
