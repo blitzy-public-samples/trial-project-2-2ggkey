@@ -1,0 +1,181 @@
+# Task Management Service Configuration
+# Version: 1.0
+# Spring Boot Version: 3.1.0
+# Last Updated: 2024-01-01
+
+# Server Configuration
+server:
+  port: 8082
+  servlet:
+    context-path: /api/v1
+  compression:
+    enabled: true
+  tomcat:
+    max-threads: 200
+    min-spare-threads: 10
+    max-connections: 10000
+    accept-count: 100
+    connection-timeout: 5000
+    remoteip:
+      remote-ip-header: X-Forwarded-For
+      protocol-header: X-Forwarded-Proto
+  http2:
+    enabled: true
+
+# Spring Configuration
+spring:
+  application:
+    name: task-service
+  
+  # Database Configuration
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskdb}
+    username: ${DB_USER:postgres}
+    password: ${DB_PASSWORD:postgres}
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 50
+      minimum-idle: 10
+      idle-timeout: 300000
+      connection-timeout: 20000
+      max-lifetime: 1200000
+      auto-commit: true
+      validation-timeout: 5000
+      pool-name: TaskServiceHikariCP
+      data-source-properties:
+        cachePrepStmts: true
+        prepStmtCacheSize: 250
+        prepStmtCacheSqlLimit: 2048
+        useServerPrepStmts: true
+
+  # JPA Configuration
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+        generate_statistics: true
+        cache:
+          use_second_level_cache: true
+          use_query_cache: true
+          region.factory_class: org.hibernate.cache.redis.hibernate.RedisRegionFactory
+        jdbc:
+          batch_size: 50
+          fetch_size: 50
+          time_zone: UTC
+    open-in-view: false
+
+  # Redis Configuration
+  redis:
+    host: ${REDIS_HOST:localhost}
+    port: ${REDIS_PORT:6379}
+    password: ${REDIS_PASSWORD:}
+    timeout: 2000
+    lettuce:
+      pool:
+        max-active: 50
+        max-idle: 20
+        min-idle: 5
+        max-wait: 1000ms
+      shutdown-timeout: 200ms
+
+# Security Configuration
+security:
+  jwt:
+    secret: ${JWT_SECRET:your-256-bit-secret}
+    expiration: 86400000 # 24 hours
+    refresh-token:
+      expiration: 604800000 # 7 days
+    token-validity-in-seconds: 86400
+    token-validity-in-seconds-for-remember-me: 2592000
+    base64-secret: ${JWT_BASE64_SECRET:}
+    authentication-header: Authorization
+
+# Actuator Configuration
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,info,env,loggers
+      base-path: /actuator
+      cors:
+        allowed-origins: "*"
+        allowed-methods: GET,POST
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+    metrics:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
+    tags:
+      application: task-service
+  info:
+    git:
+      mode: full
+    env:
+      enabled: true
+
+# Logging Configuration
+logging:
+  level:
+    root: INFO
+    com.taskmanager: DEBUG
+    org.springframework.web: INFO
+    org.hibernate: INFO
+    org.hibernate.SQL: DEBUG
+    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+    file: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level %logger{36} - %msg%n"
+  file:
+    name: logs/task-service.log
+    max-size: 10MB
+    max-history: 10
+  logback:
+    rollingpolicy:
+      max-file-size: 10MB
+      max-history: 10
+      total-size-cap: 100MB
+
+# Flyway Migration Configuration
+spring.flyway:
+  enabled: true
+  locations: classpath:db/migration
+  baseline-on-migrate: true
+  validate-on-migrate: true
+  clean-disabled: true
+
+# Cache Configuration
+spring.cache:
+  type: redis
+  redis:
+    time-to-live: 3600000
+    cache-null-values: false
+    use-key-prefix: true
+    key-prefix: task_service_
+
+# Task Service Specific Configuration
+task-service:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:3000}
+    allowed-methods: GET,POST,PUT,DELETE,OPTIONS
+    max-age: 3600
+  rate-limiting:
+    enabled: true
+    requests-per-second: 50
+  file-upload:
+    max-file-size: 10MB
+    allowed-types: application/pdf,image/jpeg,image/png
