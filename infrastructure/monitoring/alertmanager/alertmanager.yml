@@ -1,0 +1,145 @@
+# Alertmanager Configuration v0.25.0
+# Purpose: Alert routing, grouping, and notification management for the task management system
+
+# Global configuration for notification services and timeouts
+global:
+  # Time to wait before marking an alert as resolved
+  resolve_timeout: 5m
+
+  # SMTP Configuration for email alerts
+  smtp_smarthost: 'smtp.company.com:587'
+  smtp_from: 'alertmanager@company.com'
+  smtp_auth_username: '${SMTP_USER}'
+  smtp_auth_password: '${SMTP_PASSWORD}'
+  smtp_require_tls: true
+
+  # Slack Configuration
+  slack_api_url: 'https://hooks.slack.com/services/${SLACK_TOKEN}'
+
+  # PagerDuty Configuration
+  pagerduty_url: 'https://events.pagerduty.com/v2/enqueue'
+
+# Alert notification templates
+templates:
+  - '/etc/alertmanager/templates/default.tmpl'
+  - '/etc/alertmanager/templates/email.tmpl'
+  - '/etc/alertmanager/templates/slack.tmpl'
+  - '/etc/alertmanager/templates/pagerduty.tmpl'
+
+# Inhibition rules to prevent alert spam
+inhibit_rules:
+  - source_match:
+      severity: 'critical'
+    target_match:
+      severity: 'warning'
+    # Don't inhibit if they're for different clusters/services
+    equal: ['alertname', 'cluster', 'service']
+
+# Main routing tree
+route:
+  # Default grouping
+  group_by: ['alertname', 'cluster', 'service']
+  
+  # Initial wait time before sending notifications
+  group_wait: 30s
+  
+  # Minimum time between sending two notifications for the same group
+  group_interval: 5m
+  
+  # Time before resending an alert after they've been sent
+  repeat_interval: 4h
+  
+  # Default receiver if no routes match
+  receiver: 'default-receiver'
+
+  # Specific routing rules
+  routes:
+    # Critical alerts route
+    - match:
+        severity: 'critical'
+      receiver: 'critical-receiver'
+      group_wait: 0s
+      repeat_interval: 15m
+      continue: true
+
+    # High priority alerts route
+    - match:
+        severity: 'high'
+      receiver: 'high-priority-receiver'
+      group_wait: 30s
+      repeat_interval: 1h
+      continue: true
+
+    # Warning alerts route
+    - match:
+        severity: 'warning'
+      receiver: 'warning-receiver'
+      group_wait: 1m
+      repeat_interval: 4h
+
+# Receiver definitions
+receivers:
+  # Default receiver for non-critical alerts
+  - name: 'default-receiver'
+    email_configs:
+      - to: 'team@company.com'
+        send_resolved: true
+        headers:
+          subject: '{{ template "email.subject" . }}'
+        html: '{{ template "email.body" . }}'
+    slack_configs:
+      - channel: '#alerts'
+        send_resolved: true
+        icon_emoji: ':warning:'
+        title: '{{ template "slack.title" . }}'
+        text: '{{ template "slack.text" . }}'
+
+  # Critical alerts receiver with PagerDuty integration
+  - name: 'critical-receiver'
+    pagerduty_configs:
+      - service_key: '${PAGERDUTY_KEY}'
+        send_resolved: true
+        severity: 'critical'
+        description: '{{ template "pagerduty.summary" . }}'
+    email_configs:
+      - to: 'oncall@company.com'
+        send_resolved: true
+        headers:
+          subject: '[CRITICAL] {{ template "email.subject" . }}'
+        html: '{{ template "email.body" . }}'
+    slack_configs:
+      - channel: '#critical-alerts'
+        send_resolved: true
+        icon_emoji: ':rotating_light:'
+        title: '[CRITICAL] {{ template "slack.title" . }}'
+        text: '{{ template "slack.text" . }}'
+
+  # High priority receiver
+  - name: 'high-priority-receiver'
+    email_configs:
+      - to: 'sre@company.com'
+        send_resolved: true
+        headers:
+          subject: '[HIGH] {{ template "email.subject" . }}'
+        html: '{{ template "email.body" . }}'
+    slack_configs:
+      - channel: '#high-priority-alerts'
+        send_resolved: true
+        icon_emoji: ':warning:'
+        title: '[HIGH] {{ template "slack.title" . }}'
+        text: '{{ template "slack.text" . }}'
+
+  # Warning receiver
+  - name: 'warning-receiver'
+    email_configs:
+      - to: 'monitoring@company.com'
+        send_resolved: true
+        headers:
+          subject: '[WARNING] {{ template "email.subject" . }}'
+        html: '{{ template "email.body" . }}'
+    slack_configs:
+      - channel: '#monitoring'
+        send_resolved: true
+        icon_emoji: ':warning:'
+        title: '[WARNING] {{ template "slack.title" . }}'
+        text: '{{ template "slack.text" . }}'
