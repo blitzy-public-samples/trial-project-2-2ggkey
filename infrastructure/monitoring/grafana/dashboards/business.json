@@ -1,0 +1,310 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "changes(application_version[1m]) > 0",
+        "name": "Feature Releases",
+        "tagKeys": ["version", "features"],
+        "titleFormat": "New Release: v{{version}}"
+      },
+      {
+        "datasource": "Prometheus",
+        "enable": true,
+        "expr": "training_session_start > 0",
+        "name": "Training Sessions",
+        "tagKeys": ["session_type", "participants"],
+        "titleFormat": "Training: {{session_type}}"
+      }
+    ]
+  },
+  "description": "Business metrics and KPIs for the Task Management System",
+  "editable": true,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "title": "User Adoption Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "green", "value": 90 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "options": {
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        },
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "pluginVersion": "9.5.0",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(active_users_total{organization=~\"$organization\"}) / sum(total_registered_users{organization=~\"$organization\"}) * 100",
+          "legendFormat": "User Adoption Rate",
+          "refId": "A"
+        }
+      ],
+      "title": "User Adoption Rate",
+      "type": "gauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 9
+      },
+      "title": "Business Impact Metrics",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 15 },
+              { "color": "green", "value": 25 }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 10
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": ["lastNotNull"],
+          "fields": "",
+          "values": false
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "(avg_project_completion_time_baseline - avg_project_completion_time_current) / avg_project_completion_time_baseline * 100",
+          "legendFormat": "Project Delivery Improvement",
+          "refId": "A"
+        }
+      ],
+      "title": "Project Delivery Time Improvement",
+      "type": "stat"
+    },
+    {
+      "alert": {
+        "conditions": [
+          {
+            "evaluator": {
+              "params": [90],
+              "type": "lt"
+            },
+            "operator": {
+              "type": "and"
+            },
+            "query": {
+              "params": ["A", "24h", "now"]
+            },
+            "reducer": {
+              "params": [],
+              "type": "avg"
+            },
+            "type": "query"
+          }
+        ],
+        "executionErrorState": "alerting",
+        "for": "24h",
+        "frequency": "1h",
+        "handler": 1,
+        "name": "Low User Adoption",
+        "noDataState": "no_data",
+        "notifications": []
+      },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "spanNulls": true,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          },
+          "unit": "percent"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 16,
+        "x": 8,
+        "y": 10
+      },
+      "options": {
+        "legend": {
+          "calcs": ["mean", "lastNotNull", "max"],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "avg(collaboration_efficiency_score{organization=~\"$organization\"}) * 100",
+          "legendFormat": "Team Collaboration Efficiency",
+          "refId": "A"
+        }
+      ],
+      "title": "Team Collaboration Efficiency",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "5m",
+  "schemaVersion": 38,
+  "style": "dark",
+  "tags": ["business", "kpi", "task-management"],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "30d",
+          "value": "30d"
+        },
+        "name": "timeRange",
+        "options": [
+          { "selected": false, "text": "1h", "value": "1h" },
+          { "selected": false, "text": "6h", "value": "6h" },
+          { "selected": false, "text": "12h", "value": "12h" },
+          { "selected": false, "text": "1d", "value": "1d" },
+          { "selected": false, "text": "7d", "value": "7d" },
+          { "selected": true, "text": "30d", "value": "30d" },
+          { "selected": false, "text": "90d", "value": "90d" }
+        ],
+        "query": "1h,6h,12h,1d,7d,30d,90d",
+        "type": "interval"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": "Prometheus",
+        "definition": "label_values(organization)",
+        "hide": 0,
+        "name": "organization",
+        "query": "label_values(organization)",
+        "refresh": 2,
+        "regex": "",
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {
+    "refresh_intervals": [
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  },
+  "timezone": "browser",
+  "title": "Task Management System - Business Metrics",
+  "uid": "task-mgmt-business",
+  "version": 1,
+  "weekStart": ""
+}
