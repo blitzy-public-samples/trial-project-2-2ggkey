@@ -1,0 +1,198 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+env:
+  NODE_VERSION: '18.x'
+  JAVA_VERSION: '17'
+  CACHE_TTL: '7d'
+  TEST_COVERAGE_THRESHOLD: '80'
+
+jobs:
+  frontend:
+    name: Frontend Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'src/web/package-lock.json'
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: npm-cache-${{ hashFiles('src/web/package-lock.json') }}
+          restore-keys: |
+            npm-cache-
+
+      - name: Install dependencies
+        working-directory: src/web
+        run: npm ci
+
+      - name: Run linting
+        working-directory: src/web
+        run: npm run lint
+
+      - name: Run type checking
+        working-directory: src/web
+        run: npm run type-check
+
+      - name: Run tests with coverage
+        working-directory: src/web
+        run: npm run test:coverage
+        env:
+          CI: true
+
+      - name: Upload test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Frontend Tests
+          path: src/web/coverage/junit.xml
+          reporter: jest-junit
+          fail-on-error: true
+
+      - name: Build production bundle
+        working-directory: src/web
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: frontend-dist
+          path: src/web/dist
+          retention-days: 7
+
+  task_service:
+    name: Task Service Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Java ${{ env.JAVA_VERSION }}
+        uses: actions/setup-java@v3
+        with:
+          java-version: ${{ env.JAVA_VERSION }}
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Cache Maven packages
+        uses: actions/cache@v3
+        with:
+          path: ~/.m2
+          key: maven-cache-${{ hashFiles('src/backend/task-service/pom.xml') }}
+          restore-keys: |
+            maven-cache-
+
+      - name: Build with Maven
+        working-directory: src/backend/task-service
+        run: mvn -B clean verify
+
+      - name: Upload test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Task Service Tests
+          path: src/backend/task-service/target/surefire-reports/*.xml
+          reporter: java-junit
+          fail-on-error: true
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: task-service-jar
+          path: src/backend/task-service/target/*.jar
+          retention-days: 7
+
+  auth_service:
+    name: Auth Service Build & Test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js ${{ env.NODE_VERSION }}
+        uses: actions/setup-node@v3
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: 'src/backend/auth-service/package-lock.json'
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: npm-cache-${{ hashFiles('src/backend/auth-service/package-lock.json') }}
+          restore-keys: |
+            npm-cache-
+
+      - name: Install dependencies
+        working-directory: src/backend/auth-service
+        run: npm ci
+
+      - name: Run linting
+        working-directory: src/backend/auth-service
+        run: npm run lint
+
+      - name: Run type checking
+        working-directory: src/backend/auth-service
+        run: npm run typecheck
+
+      - name: Run tests with coverage
+        working-directory: src/backend/auth-service
+        run: npm run test:coverage
+        env:
+          CI: true
+
+      - name: Upload test results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Auth Service Tests
+          path: src/backend/auth-service/coverage/junit.xml
+          reporter: jest-junit
+          fail-on-error: true
+
+      - name: Build TypeScript
+        working-directory: src/backend/auth-service
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: auth-service-dist
+          path: src/backend/auth-service/dist
+          retention-days: 7
+
+  validate:
+    name: Validation
+    needs: [frontend, task_service, auth_service]
+    runs-on: ubuntu-latest
+    if: always()
+
+    steps:
+      - name: Check build status
+        run: |
+          if [ "${{ needs.frontend.result }}" != "success" ] || \
+             [ "${{ needs.task_service.result }}" != "success" ] || \
+             [ "${{ needs.auth_service.result }}" != "success" ]; then
+            echo "One or more builds failed"
+            exit 1
+          fi
