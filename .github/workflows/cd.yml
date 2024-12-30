@@ -1,0 +1,208 @@
+# Task Management System - Continuous Deployment Workflow
+# Version: 1.0.0
+# Purpose: Handles automated deployment to staging and production environments with security checks,
+# monitoring, and zero-downtime deployment capabilities
+
+name: Continuous Deployment
+
+# Trigger on successful CI workflow completion or manual dispatch
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+      deployment_strategy:
+        description: 'Deployment strategy'
+        required: true
+        type: choice
+        options:
+          - blue-green
+          - canary
+          - rolling
+
+# Environment variables
+env:
+  DOCKER_REGISTRY: ghcr.io
+  KUBE_NAMESPACE: task-management
+  DEPLOYMENT_TIMEOUT: 600s
+  ROLLBACK_THRESHOLD: 5
+  HEALTH_CHECK_RETRIES: 3
+  CANARY_PERCENTAGE: 20
+
+# Permission configuration
+permissions:
+  contents: read
+  packages: write
+  deployments: write
+  id-token: write
+
+jobs:
+  # Security scan job
+  security_scan:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+          
+      - name: Run dependency scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+      - name: Run container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs,config'
+          ignore-unfixed: true
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload scan results
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  # Build and push container images
+  build_and_push:
+    name: Build and Push Images
+    needs: security_scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+        with:
+          version: latest
+          buildkitd-flags: --debug
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ${{ env.DOCKER_REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push API Gateway
+        uses: docker/build-push-action@v4
+        with:
+          context: ./src/backend/api-gateway
+          push: true
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/api-gateway:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ github.sha }}
+            BUILD_DATE=${{ steps.date.outputs.date }}
+
+  # Deploy to staging environment
+  deploy_staging:
+    name: Deploy to Staging
+    needs: build_and_push
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set Kubernetes Context
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+          context: staging-cluster
+
+      - name: Validate Kubernetes manifests
+        uses: azure/k8s-lint@v1
+        with:
+          manifests: |
+            src/backend/k8s/api-gateway-deployment.yml
+
+      - name: Deploy Canary
+        uses: azure/k8s-deploy@v4
+        with:
+          namespace: ${{ env.KUBE_NAMESPACE }}
+          manifests: |
+            src/backend/k8s/api-gateway-deployment.yml
+          images: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/api-gateway:${{ github.sha }}
+          strategy: canary
+          percentage: ${{ env.CANARY_PERCENTAGE }}
+          timeout: ${{ env.DEPLOYMENT_TIMEOUT }}
+
+      - name: Monitor Deployment
+        uses: datadog/action-monitor-deployment@v1
+        with:
+          api-key: ${{ secrets.DD_API_KEY }}
+          app-key: ${{ secrets.DD_APP_KEY }}
+          environment: staging
+          service: api-gateway
+          version: ${{ github.sha }}
+
+  # Deploy to production environment
+  deploy_production:
+    name: Deploy to Production
+    needs: deploy_staging
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://api.taskmaster.com
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set Kubernetes Context
+        uses: azure/k8s-set-context@v3
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_PRODUCTION }}
+          context: production-cluster
+
+      - name: Create Deployment Snapshot
+        run: |
+          kubectl get deployment api-gateway -n ${{ env.KUBE_NAMESPACE }} -o yaml > deployment-snapshot.yaml
+
+      - name: Deploy to Production
+        uses: azure/k8s-deploy@v4
+        with:
+          namespace: ${{ env.KUBE_NAMESPACE }}
+          manifests: |
+            src/backend/k8s/api-gateway-deployment.yml
+          images: |
+            ${{ env.DOCKER_REGISTRY }}/${{ github.repository }}/api-gateway:${{ github.sha }}
+          strategy: blue-green
+          timeout: ${{ env.DEPLOYMENT_TIMEOUT }}
+          rollback-deployment-snapshot: deployment-snapshot.yaml
+
+      - name: Monitor Production Health
+        uses: datadog/action-monitor-deployment@v1
+        with:
+          api-key: ${{ secrets.DD_API_KEY }}
+          app-key: ${{ secrets.DD_APP_KEY }}
+          environment: production
+          service: api-gateway
+          version: ${{ github.sha }}
+
+      - name: Update Deployment Status
+        if: always()
+        uses: chrnorm/deployment-status@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          environment-url: https://api.taskmaster.com
+          state: ${{ job.status }}
+          deployment-id: ${{ github.event.deployment.id }}
