@@ -128,7 +128,7 @@ jobs:
           context: staging-cluster
 
       - name: Validate Kubernetes manifests
-        uses: azure/k8s-lint@v1
+        uses: azure/k8s-lint@v3
         with:
           manifests: |
             src/backend/k8s/api-gateway-deployment.yml
