@@ -1,0 +1,221 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: postgres
+  namespace: task-management
+  labels:
+    app: postgres
+    component: database
+spec:
+  serviceName: postgres-headless
+  replicas: 3
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+        component: database
+    spec:
+      # Topology spread for high availability across zones
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: topology.kubernetes.io/zone
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: postgres
+      
+      # Pod anti-affinity for HA
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - postgres
+              topologyKey: "kubernetes.io/hostname"
+      
+      # Security context for the pod
+      securityContext:
+        fsGroup: 999
+        runAsUser: 999
+        runAsGroup: 999
+        runAsNonRoot: true
+      
+      containers:
+        - name: postgres
+          image: postgres:14.0
+          imagePullPolicy: IfNotPresent
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          
+          ports:
+            - name: postgresql
+              containerPort: 5432
+              protocol: TCP
+          
+          # Resource limits
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "2"
+              memory: "4Gi"
+          
+          # Environment variables
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: database-secrets
+                  key: DB_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: database-secrets
+                  key: DB_PASSWORD
+            - name: POSTGRES_DB
+              value: "taskmanager"
+            - name: PGDATA
+              value: "/var/lib/postgresql/data/pgdata"
+            - name: POSTGRES_INITDB_ARGS
+              value: "--data-checksums"
+            - name: SSL_CERT_FILE
+              valueFrom:
+                secretKeyRef:
+                  name: ssl-certificates
+                  key: tls.crt
+            - name: POSTGRES_SSL_MODE
+              value: "verify-full"
+          
+          # Health checks
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+            successThreshold: 1
+          
+          startupProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - postgres
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 30
+          
+          volumeMounts:
+            - name: postgres-data
+              mountPath: /var/lib/postgresql/data
+            - name: postgres-config
+              mountPath: /etc/postgresql/conf.d
+              readOnly: true
+            - name: ssl-certs
+              mountPath: /etc/ssl/postgresql
+              readOnly: true
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+        
+        # Backup sidecar container
+        - name: backup
+          image: postgres:14.0
+          command: ["/backup/backup.sh"]
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "200m"
+              memory: "512Mi"
+          volumeMounts:
+            - name: postgres-backup
+              mountPath: /backup
+            - name: backup-scripts
+              mountPath: /backup/scripts
+              readOnly: true
+          env:
+            - name: BACKUP_SCHEDULE
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-backup-config
+                  key: schedule
+            - name: RETENTION_DAYS
+              valueFrom:
+                configMapKeyRef:
+                  name: postgres-backup-config
+                  key: retention_days
+      
+      volumes:
+        - name: postgres-config
+          configMap:
+            name: postgres-config
+        - name: backup-scripts
+          configMap:
+            name: postgres-backup-config
+        - name: ssl-certs
+          secret:
+            secretName: ssl-certificates
+        - name: init-scripts
+          configMap:
+            name: postgres-init-scripts
+  
+  volumeClaimTemplates:
+    - metadata:
+        name: postgres-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ebs-gp3
+        resources:
+          requests:
+            storage: 100Gi
+        encryption:
+          enabled: true
+          kmsKeyId: aws/ebs
+    
+    - metadata:
+        name: postgres-backup
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: ebs-gp3
+        resources:
+          requests:
+            storage: 200Gi
+        encryption:
+          enabled: true
+          kmsKeyId: aws/ebs
