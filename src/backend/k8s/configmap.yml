@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: taskmanager-config
+  namespace: taskmanager
+  labels:
+    app: taskmanager
+    environment: production
+data:
+  # Task Service Configuration
+  task-service.properties: |
+    spring.application.name=task-service
+    spring.jpa.hibernate.ddl-auto=validate
+    spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+    server.port=8082
+    server.compression.enabled=true
+    management.endpoints.web.exposure.include=health,metrics,prometheus
+    logging.level.root=INFO
+    logging.level.com.taskmanager=DEBUG
+
+  # Notification Service Configuration
+  notification-service.properties: |
+    APP_NAME=Task Management System - Notification Service
+    API_VERSION=v1
+    NOTIFICATION_BATCH_SIZE=100
+    NOTIFICATION_RETRY_ATTEMPTS=3
+    NOTIFICATION_RETRY_DELAY=300
+    RABBITMQ_VHOST=/
+    SMTP_PORT=587
+    REDIS_DB=0
+
+  # Auth Service Configuration
+  auth-service.properties: |
+    ACCESS_TOKEN_EXPIRY=15m
+    REFRESH_TOKEN_EXPIRY=7d
+    PASSWORD_SALT_ROUNDS=12
+    PASSWORD_MIN_LENGTH=8
+    MAX_LOGIN_ATTEMPTS=5
+    ACCOUNT_LOCK_DURATION=1800000
+    MFA_DIGITS=6
+    MFA_STEP=30
+    MFA_WINDOW=1
+    AUTH0_DOMAIN=taskmanager.auth0.com
+
+  # Global Configuration
+  global.properties: |
+    ENVIRONMENT=production
+    LOG_LEVEL=INFO
+
+  # Service Health Check Configuration
+  health-check.properties: |
+    HEALTH_CHECK_INTERVAL=30
+    READINESS_TIMEOUT=5
+    LIVENESS_TIMEOUT=3
+    STARTUP_PROBE_INITIAL_DELAY=10
+
+  # Monitoring Configuration
+  monitoring.properties: |
+    METRICS_ENABLED=true
+    PROMETHEUS_SCRAPE_INTERVAL=15
+    METRICS_PATH=/actuator/prometheus
+    HEALTH_PATH=/actuator/health
+
+  # Resource Management Configuration
+  resources.properties: |
+    MAX_MEMORY_REQUEST=4Gi
+    MAX_CPU_REQUEST=2
+    MIN_MEMORY_REQUEST=512Mi
+    MIN_CPU_REQUEST=0.5
+
+  # Service Discovery Configuration
+  service-discovery.properties: |
+    SERVICE_REGISTRY_ENABLED=true
+    REGISTRY_UPDATE_INTERVAL=30
+    DNS_LOOKUP_TIMEOUT=5
+    SERVICE_NAMESPACE=taskmanager
