@@ -1,0 +1,73 @@
+# Task Management System Robots.txt
+# Version: 1.0
+# Last Updated: 2024
+# Character Encoding: UTF-8
+
+# Default rules for all web crawlers
+User-agent: *
+
+# Crawl delay to manage server load (in seconds)
+Crawl-delay: 10
+
+# Allow public routes
+Allow: /
+Allow: /login
+Allow: /register
+Allow: /about
+Allow: /contact
+Allow: /manifest.json
+Allow: /terms
+Allow: /privacy
+Allow: /help
+Allow: /support
+Allow: /features
+
+# Protect sensitive application routes
+Disallow: /api/
+Disallow: /dashboard/
+Disallow: /projects/
+Disallow: /tasks/
+Disallow: /settings/
+Disallow: /auth/
+Disallow: /admin/
+Disallow: /user/
+Disallow: /team/
+
+# Protect static assets and configuration files
+Disallow: /*.json$
+Disallow: /*.js$
+Disallow: /*.css$
+Disallow: /*.config$
+Disallow: /assets/internal/
+Disallow: /temp/
+Disallow: /download/
+
+# Sitemap reference for search engines
+Sitemap: /sitemap.xml
+
+# Special rules for major search engine crawlers
+User-agent: Googlebot
+Crawl-delay: 10
+
+User-agent: Bingbot
+Crawl-delay: 10
+
+User-agent: DuckDuckBot
+Crawl-delay: 10
+
+# Block known malicious bots
+User-agent: MJ12bot
+Disallow: /
+
+User-agent: AhrefsBot
+Disallow: /
+
+User-agent: SemrushBot
+Disallow: /
+
+# Additional security measures
+User-agent: *
+Disallow: /*?*
+Disallow: /*&*
+Disallow: /*/print/
+Disallow: /*/pdf/
