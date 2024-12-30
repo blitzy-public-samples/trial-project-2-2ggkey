@@ -1,0 +1,26 @@
+Format: ICO (Windows Icon)
+Dimensions: 32x32 pixels
+Color Depth: 32-bit RGBA
+Primary Color: #2196F3 (Material Design Blue)
+Background: Transparent
+File Size: Optimized to be under 5KB
+
+The icon should be created following these guidelines:
+1. Use Material Design principles with a simple, recognizable shape
+2. Implement the primary color #2196F3 as the main brand color
+3. Maintain transparent background for theme compatibility
+4. Ensure 4.5:1 minimum contrast ratio for accessibility
+5. Optimize for 32x32 pixel display while remaining crisp and clear
+6. Include appropriate ICO format compression
+
+The favicon should be created using an image editor supporting ICO format export with the following layers:
+1. Transparent background layer
+2. Material Design shape layer using #2196F3
+3. Subtle shadow/depth effect (optional) for better visibility
+
+The file should be served with:
+Cache-Control: public, max-age=31536000
+
+This icon will be referenced by:
+- public/index.html in <link rel="icon"> tag
+- public/manifest.json for PWA icon purposes
