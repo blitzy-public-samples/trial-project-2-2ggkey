@@ -1,0 +1,188 @@
+# Redis StatefulSet Configuration v7.0
+# High Availability Redis Cluster with Enhanced Security and Monitoring
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: redis
+  labels:
+    app: redis
+    component: cache
+spec:
+  replicas: 3
+  serviceName: redis-headless
+  podManagementPolicy: OrderedReady
+  updateStrategy:
+    type: RollingUpdate
+  revisionHistoryLimit: 10
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9121"
+    spec:
+      # Security Context for Pod
+      securityContext:
+        fsGroup: 1001
+        runAsUser: 1001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      
+      # Anti-affinity for High Availability
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchExpressions:
+                  - key: app
+                    operator: In
+                    values:
+                      - redis
+              topologyKey: "kubernetes.io/hostname"
+      
+      containers:
+        - name: redis
+          image: redis:7.0-alpine
+          imagePullPolicy: IfNotPresent
+          command:
+            - redis-server
+            - "/etc/redis/redis.conf"
+            - "--requirepass $(REDIS_PASSWORD)"
+            - "--masterauth $(REDIS_PASSWORD)"
+          
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+          
+          # Resource Limits
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 1000m
+              memory: 2Gi
+          
+          # Health Checks
+          livenessProbe:
+            tcpSocket:
+              port: redis
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          
+          # Volume Mounts
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+            - name: redis-config
+              mountPath: /etc/redis
+            - name: redis-tls
+              mountPath: /etc/redis/tls
+              readOnly: true
+          
+          # Environment Variables
+          envFrom:
+            - configMapRef:
+                name: redis-config
+            - secretRef:
+                name: redis-secrets
+        
+        # Redis Exporter for Prometheus Metrics
+        - name: redis-exporter
+          image: oliver006/redis_exporter:latest
+          ports:
+            - name: metrics
+              containerPort: 9121
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          env:
+            - name: REDIS_ADDR
+              value: "redis://localhost:6379"
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: redis-secrets
+                  key: REDIS_PASSWORD
+      
+      volumes:
+        - name: redis-config
+          configMap:
+            name: redis-config
+            items:
+              - key: redis.conf
+                path: redis.conf
+        - name: redis-tls
+          secret:
+            secretName: redis-secrets
+            items:
+              - key: REDIS_TLS_CERT
+                path: tls.crt
+  
+  # Persistent Volume Claims
+  volumeClaimTemplates:
+    - metadata:
+        name: redis-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: standard
+        resources:
+          requests:
+            storage: 10Gi
+
+---
+# Network Policy for Redis
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: api
+        - podSelector:
+            matchLabels:
+              app: worker
+      ports:
+        - protocol: TCP
+          port: 6379
+        - protocol: TCP
+          port: 9121
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
