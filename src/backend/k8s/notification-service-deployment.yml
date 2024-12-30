@@ -1,0 +1,153 @@
+# Notification Service Deployment Manifest
+# Version: 1.0.0
+# Purpose: Manages the deployment of notification service pods
+# Dependencies: configmap.yml, secrets.yml
+# Last Updated: 2024
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: task-management
+  labels:
+    app: notification-service
+    component: backend
+    part-of: task-management-system
+    environment: production
+  annotations:
+    description: "Notification service for asynchronous message processing"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8000"
+    prometheus.io/path: "/metrics"
+
+spec:
+  # High availability with 3 replicas as per requirements
+  replicas: 3
+  
+  # Pod selection criteria
+  selector:
+    matchLabels:
+      app: notification-service
+  
+  # Zero-downtime deployment strategy
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  
+  template:
+    metadata:
+      labels:
+        app: notification-service
+        component: backend
+      annotations:
+        checksum/config: "${CONFIG_CHECKSUM}"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    
+    spec:
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 2000
+      
+      # Container specifications
+      containers:
+        - name: notification-service
+          image: task-management/notification-service:latest
+          imagePullPolicy: Always
+          
+          # Container ports
+          ports:
+            - name: http
+              containerPort: 8000
+              protocol: TCP
+            - name: metrics
+              containerPort: 9090
+              protocol: TCP
+          
+          # Resource limits as per requirements
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "1Gi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: http
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+          
+          # Environment configuration
+          envFrom:
+            - configMapRef:
+                name: taskmanager-config
+            - secretRef:
+                name: smtp-secrets
+            - secretRef:
+                name: redis-secrets
+          
+          # Additional environment variables
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          
+          # Volume mounts for logs and temp data
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: logs
+              mountPath: /var/log/notification-service
+      
+      # Volumes definition
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: logs
+          emptyDir: {}
+      
+      # Pod scheduling and termination
+      terminationGracePeriodSeconds: 60
+      dnsPolicy: ClusterFirst
+      restartPolicy: Always
+      
+      # Affinity rules for high availability
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app
+                      operator: In
+                      values:
+                        - notification-service
+                topologyKey: kubernetes.io/hostname
