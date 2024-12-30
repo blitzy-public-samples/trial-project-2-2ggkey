@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+    <!-- Character encoding -->
+    <meta charset="UTF-8">
+    
+    <!-- Viewport configuration for responsive design -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    
+    <!-- Primary Meta Tags -->
+    <title>Task Management System - Enterprise Collaboration Platform</title>
+    <meta name="description" content="Enterprise-grade task management solution for efficient team collaboration and project organization">
+    <meta name="theme-color" content="#2196F3">
+    
+    <!-- Security Headers (implemented via server configuration) -->
+    <!-- 
+    Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.api.taskmanager.com
+    X-Content-Type-Options: nosniff
+    X-Frame-Options: DENY
+    X-XSS-Protection: 1; mode=block
+    Strict-Transport-Security: max-age=31536000; includeSubDomains
+    -->
+
+    <!-- PWA Support -->
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    <link rel="apple-touch-icon" href="/logo192.png">
+    
+    <!-- Resource Hints -->
+    <link rel="dns-prefetch" href="https://api.taskmanager.com">
+    <link rel="preconnect" href="https://api.taskmanager.com" crossorigin>
+    
+    <!-- Preload Critical Resources -->
+    <link rel="preload" href="/assets/fonts/roboto-v30-latin-regular.woff2" as="font" type="font/woff2" crossorigin>
+    <link rel="modulepreload" href="/src/index.tsx">
+    
+    <!-- Vite Development Script (will be replaced in production) -->
+    <script type="module" src="/src/index.tsx"></script>
+    
+    <!-- Inline Critical CSS -->
+    <style>
+        /* Minimal CSS for initial render */
+        :root {
+            --primary-color: #2196F3;
+            --background-color: #FFFFFF;
+            --text-color: #333333;
+        }
+        
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        
+        #root {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        /* Loading state styles */
+        .initial-loader {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: var(--background-color);
+        }
+    </style>
+</head>
+<body>
+    <!-- Main Application Container -->
+    <main id="root" role="main" aria-label="Task Management Application">
+        <!-- Initial Loading State -->
+        <div class="initial-loader" role="progressbar" aria-label="Loading application">
+            <svg width="50" height="50" viewBox="0 0 50 50" aria-hidden="true">
+                <circle cx="25" cy="25" r="20" fill="none" stroke="var(--primary-color)" stroke-width="5">
+                    <animate attributeName="stroke-dasharray" from="1,150" to="90,150" dur="1.5s" repeatCount="indefinite"/>
+                    <animate attributeName="stroke-dashoffset" from="0" to="-35" dur="1.5s" repeatCount="indefinite"/>
+                </circle>
+            </svg>
+        </div>
+    </main>
+
+    <!-- Fallback for No JavaScript -->
+    <noscript>
+        <div style="padding: 20px; text-align: center;">
+            <h1>JavaScript Required</h1>
+            <p>This application requires JavaScript to function. Please enable JavaScript in your browser settings to continue.</p>
+            <p>For instructions on enabling JavaScript, visit: <a href="https://enable-javascript.com" target="_blank" rel="noopener noreferrer">enable-javascript.com</a></p>
+        </div>
+    </noscript>
+
+    <!-- Error Boundary -->
+    <script>
+        window.onerror = function(msg, url, lineNo, columnNo, error) {
+            console.error('Global Error:', { msg, url, lineNo, columnNo, error });
+            // Log to monitoring service in production
+            return false;
+        };
+    </script>
+</body>
+</html>
