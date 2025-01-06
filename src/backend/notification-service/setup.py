@@ -55,7 +55,7 @@ setup(
         "websockets==12.0",          # WebSocket server and client
         "aioredis==2.0.1",          # Async Redis client
         "tenacity==8.2.3",          # Retry library for resilience
-        "httpx==0.25.1",            # Async HTTP client
+        "httpx==0.28.1",            # Async HTTP client
     ],
     
     # Development dependencies
