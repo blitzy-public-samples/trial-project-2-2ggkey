@@ -62,7 +62,7 @@ setup(
     extras_require={
         "dev": [
             "pytest==7.4.0",           # Testing framework
-            "pytest-cov==4.1.0",       # Test coverage
+            "pytest-cov==6.0.0",       # Test coverage
             "pytest-asyncio==0.21.1",  # Async test support
             "black==23.7.0",           # Code formatter
             "flake8==6.1.0",           # Code linter
