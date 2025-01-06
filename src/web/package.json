@@ -56,7 +56,7 @@
     "react-router-dom": "^6.11.0",
     "react-toastify": "^9.1.3",
     "react-virtual": "^2.10.4",
-    "react-window": "1.8.9",
+    "react-window": "1.8.11",
     "resize-observer-polyfill": "^1.5.1",
     "retry-ts": "^2.0.0",
     "styled-components": "^5.3.10",
