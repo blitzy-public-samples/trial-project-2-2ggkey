@@ -67,7 +67,7 @@ setup(
             "black==23.7.0",           # Code formatter
             "flake8==6.1.0",           # Code linter
             "mypy==1.5.0",             # Static type checker
-            "isort==5.12.0",           # Import sorter
+            "isort==5.13.2",           # Import sorter
             "pre-commit==3.5.0",       # Git hooks manager
             "docker==6.1.3",           # Docker SDK for testing
             "locust==2.17.0",          # Load testing
