@@ -34,7 +34,7 @@
     "rate-limiter-flexible": "^2.4.1",
     "speakeasy": "^2.0.0",
     "typescript": "^5.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^11.0.5"
   },
   "devDependencies": {
     "@jest/globals": "^29.0.0",
