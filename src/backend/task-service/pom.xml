@@ -28,7 +28,7 @@
         <jwt.version>0.9.1</jwt.version>
         <springdoc.version>2.1.0</springdoc.version>
         <lombok.version>1.18.28</lombok.version>
-        <micrometer.version>1.11.0</micrometer.version>
+        <micrometer.version>1.14.3</micrometer.version>
         <resilience4j.version>1.7.0</resilience4j.version>
         <hibernate.validator.version>7.0.1.Final</hibernate.validator.version>
     </properties>
