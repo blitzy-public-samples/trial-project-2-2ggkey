@@ -40,7 +40,7 @@ setup(
     
     # Core dependencies
     install_requires=[
-        "fastapi==0.104.0",          # Web framework for building APIs
+        "fastapi==0.115.8",          # Web framework for building APIs
         "uvicorn==0.24.0",           # ASGI server implementation
         "pydantic==2.4.2",           # Data validation using Python type annotations
         "redis==5.0.1",              # Redis client for caching
