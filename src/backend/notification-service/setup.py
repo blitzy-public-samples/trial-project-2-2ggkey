@@ -70,7 +70,7 @@ setup(
             "isort==5.12.0",           # Import sorter
             "pre-commit==3.5.0",       # Git hooks manager
             "docker==6.1.3",           # Docker SDK for testing
-            "locust==2.17.0",          # Load testing
+            "locust==2.32.8",          # Load testing
         ]
     },
     
